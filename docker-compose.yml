@@ -1,0 +1,41 @@
+version: '3'
+
+services:
+  web:
+    build: .
+    container_name: webauth-backend
+    restart: always
+    ports:
+      - 8100:8000
+    environment:
+      - webauth-back
+    networks:
+      - webauthn
+    volumes:
+      - .:/src
+    depends_on:
+      - mongo
+
+  mongo:
+    container_name: webauth-mongo
+    image: mongo:6.0.6
+    networks:
+      - webauthn
+    ports:
+      - '27017:27017'
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: front.dockerfile
+    container_name: webauth-frontend
+    restart: always
+    ports:
+      - 9190:80
+    networks:
+      - webauthn
+
+networks:
+  webauthn:
+    driver: bridge
