@@ -3,3 +3,4 @@ uvicorn
 webauthn
 python-dotenv
 pymongo
+fido2

@@ -31,8 +31,10 @@ services:
       dockerfile: front.dockerfile
     container_name: webauth-frontend
     restart: always
+    depends_on:
+      - web
     ports:
-      - 9190:80
+      - 9000:80
     networks:
       - webauthn
 
