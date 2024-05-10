@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from dataclasses import dataclass, field
-from webauthn.helpers.structs import AuthenticatorTransport
+from webauthn.helpers.structs import AuthenticatorTransport, CredentialDeviceType
 
 @dataclass
 class Credential:
@@ -13,7 +13,12 @@ class Credential:
 @dataclass
 class User(BaseModel):
     id: str
+    public_key: str
     username: str
-    credentials: List[Credential] = field(default_factory=list)
-    
+    sign_count: int
+    is_discoverable_credential: Optional[bool]
+    device_type: CredentialDeviceType
+    backed_up: bool
+    transports: Optional[List[AuthenticatorTransport]]
+    aaguid: str = ""
     

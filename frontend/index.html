@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebAuthn Test</title>
-    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <script src = simplewebauthn-browser.4.1.0.umd.min.js></script>
 </head>
 <body>
     <div class="container">
@@ -35,9 +35,9 @@
         </details>
     </div>
 <script>
-const BASE_URL = 'http://localhost:8100'; // Base URL for backend API requests
+const BASE_URL = 'http://localhost:8100'; 
 
-const { startRegistration, platformAuthenticatorIsAvailable } = SimpleWebAuthnBrowser;
+const { startRegistration, platformAuthenticatorIsAvailable, startAuthentication } = SimpleWebAuthnBrowser;
 
 const statusRegister = document.getElementById("statusRegister");
 const dbgRegister = document.getElementById("dbgRegister");
@@ -75,25 +75,22 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
     const username = document.getElementById("username").value;
     
     try {
-        // Fetch registration options from backend
         const resp = await fetch(`${BASE_URL}/webauth/register_options?username=${encodeURIComponent(username)}`);
         const opts = await resp.json();
 
-        // Check if registration options are valid
-        if (!opts || !opts.challenge) {
-            throw new Error("Invalid registration options received from the server.");
-        }
+        console.log("Received registration options:", opts);
 
-        // Print registration options to debug
+        //if (!opts || !opts.challenge) {
+        //   throw new Error("Invalid registration options received from the server.");
+        //}
+
         printToDebug(dbgRegister, "Registration Options", JSON.stringify(opts, null, 2));
 
-        // Start WebAuthn registration
         const regResp = await startRegistration(opts);
+        console.log("Received registration options:", opts);
 
-        // Print registration response to debug
         printToDebug(dbgRegister, "Registration Response", JSON.stringify(regResp, null, 2));
 
-        // Send registration response to the server for verification
         const verificationResp = await fetch(
             `${BASE_URL}/webauth/verify_registration`,
             {
@@ -101,11 +98,10 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ ...regResp, username }),
+                body: JSON.stringify({regResp}),
             }
         );
 
-        // Report validation response
         const verificationRespJSON = await verificationResp.json();
         const { verified, msg } = verificationRespJSON;
         if (verified) {
@@ -122,6 +118,60 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
         printToStatus(statusRegister, getFailureStatus(err.message));
         console.error("Error occurred:", err);
     }
+});
+
+
+document.getElementById("loginbtn").addEventListener("click", async () => {
+    resetStatus(statusAuthenticate);
+    resetDebug(dbgAuthenticate);
+
+    const resp = await fetch("${BASE_URL}/webauth//generate-authentication-options");
+    const opts = await resp.json();
+    printToDebug(
+      dbgAuthenticate,
+      "Authentication Options",
+      JSON.stringify(opts, null, 2)
+    );
+
+    // Start WebAuthn Authentication
+    let authResp;
+    try {
+      authResp = await startAuthentication(opts);
+      printToDebug(
+        dbgAuthenticate,
+        "Authentication Response",
+        JSON.stringify(authResp, null, 2)
+      );
+    } catch (err) {
+      printToStatus(statusAuthenticate, getFailureStatus(err));
+      throw new Error(err);
+    }
+
+    // Send response to server
+    const verificationResp = await fetch(
+      "/verify-authentication-response",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(authResp),
+      }
+    );
+
+    // Report validation response
+    const verificationRespJSON = await verificationResp.json();
+    const { verified, msg } = verificationRespJSON;
+    if (verified) {
+      printToStatus(statusAuthenticate, getPassStatus());
+    } else {
+      printToStatus(statusAuthenticate, getFailureStatus(msg));
+    }
+    printToDebug(
+      dbgAuthenticate,
+      "Verification Response",
+      JSON.stringify(verificationRespJSON, null, 2)
+    );
 });
 
 // Platform Authenticator Check Logic
@@ -147,17 +197,59 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
         // Prompt the user to use the platform authenticator
         const confirmation = confirm(`You can use ${platformAuthenticatorName} or security keys for registration or authentication. Do you want to proceed?`);
         if (confirmation) {
-            // User confirmed, proceed with registration or authentication using platform authenticator
+    // User confirmed, proceed with registration or authentication using platform authenticator
+    
+    // Check if the action is registration or login
+    const action = document.getElementById("registerbtn").disabled ? "login" : "register";
+
+    // Prepare the request data based on the action
+    const requestData = {
+        action: action,
+        username: document.getElementById("username").value,
+        platformAuthenticatorName: platformAuthenticatorName
+    };
+
+    try {
+        // Send the request to the server
+        const response = await fetch(`${BASE_URL}/webauth/${action}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestData),
+        });
+
+        // Handle the response
+        const responseData = await response.json();
+        if (responseData.success) {
+            // If the server indicates success, update the UI accordingly
+            if (action === "register") {
+                printToStatus(statusRegister, getPassStatus());
+            } else {
+                // Handle successful login
+            }
         } else {
-            // User declined, provide alternative option
-            // Example: Prompt the user to use security keys
-            alert('You can use security keys for registration or authentication.');
+            // If the server indicates failure, display the error message
+            printToStatus(statusRegister, getFailureStatus(responseData.message));
         }
+    } catch (err) {
+        // Handle any errors that occur during the request
+        printToStatus(statusRegister, getFailureStatus(err.message));
+        console.error("Error occurred:", err);
+    }
+} else {
+    // User declined, provide alternative option
+    // Example: Prompt the user to use security keys
+    alert('You can use security keys for registration or authentication.');
+}
+
     } else {
         // Prompt the user to use security keys
         alert('You can use security keys for registration or authentication.');
     }
 })();
+
+
 </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from models.model import User
-from schemas.schema import register_user, registration_check, hander_verify_authentication_response, handler_generate_authentication_options
+from schemas.register import register_user, registration_check
+from schemas.auth import verify_authentication_response, handler_generate_authentication_options
 
 router = APIRouter(
     prefix="/webauth",
@@ -32,9 +33,7 @@ async def authenticate_opts(name: str):
 @router.post("/verify_authenticate/")
 async def ver_authenticate(request: Request):
     try:
-        data = await request.json()
-        username = data.get('username')
-        verification_result = await hander_verify_authentication_response(request, username)
+        verification_result = await verify_authentication_response(request)
         return {"verification_result": verification_result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
