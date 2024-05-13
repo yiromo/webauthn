@@ -1,8 +1,5 @@
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
 from typing import Dict, Any
-from models.model import User, Credential
-import os
 import uuid
 import json
 from connection import collection as coll
@@ -15,7 +12,6 @@ from webauthn.helpers.parse_registration_credential_json import parse_registrati
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
     UserVerificationRequirement,
-    RegistrationCredential,
 )
 import base64
 from webauthn.helpers.cose import COSEAlgorithmIdentifier
@@ -36,9 +32,6 @@ async def register_user(username: str):
 
     user_passkeys = coll.find({"user.username": username})
 
-    #encoded_id = base64.urlsafe_b64encode(username.encode())
-    #encoded_id = to_base64url(to_buffer(username))
-    #user_id_utf = str(uuid.uuid4()).encode('utf-8')
     user_id_str = str(uuid.uuid4())
     user_id_bytes = user_id_str.encode('utf-8')
     encoded_user_id = base64.urlsafe_b64encode(user_id_bytes)
