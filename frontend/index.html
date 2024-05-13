@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebAuthn Test</title>
     <link rel="stylesheet" href="styles.css">
-    <script src = simplewebauthn-browser.4.1.0.umd.min.js></script>
+    <script src="simplewebauthn-browser.4.1.0.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -34,6 +34,17 @@
             </section>
         </details>
     </div>
+    <div>
+        <details>
+            <summary>Status</summary>
+            <section>
+                <h3>Authentication</h3>
+                <p>Status: <span id="statusAuthenticate"></span></p>
+                <h4>Raw Output:</h4>
+                <textarea id="dbgAuthenticate" spellcheck="false"></textarea>
+            </section>
+        </details>
+    </div>
 <script>
 const BASE_URL = 'http://localhost:8100'; 
 
@@ -41,7 +52,8 @@ const { startRegistration, platformAuthenticatorIsAvailable, startAuthentication
 
 const statusRegister = document.getElementById("statusRegister");
 const dbgRegister = document.getElementById("dbgRegister");
-
+const statusAuthenticate = document.getElementById("statusAuthenticate");
+const dbgAuthenticate = document.getElementById("dbgAuthenticate");
 function printToDebug(elemDebug, title, output) {
   if (elemDebug.innerHTML !== "") {
     elemDebug.innerHTML += "\n";
@@ -76,18 +88,36 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
     
     try {
         const resp = await fetch(`${BASE_URL}/webauth/register_options?username=${encodeURIComponent(username)}`);
+        console.log(resp,'resp')
         const opts = await resp.json();
-
         console.log("Received registration options:", opts);
 
-        //if (!opts || !opts.challenge) {
-        //   throw new Error("Invalid registration options received from the server.");
-        //}
-
+        //console.log("Challenge:", opts.challenge);
+        //console.log("Attestation:", opts.attestation);
+        //console.log("Authenticator Selection:", opts.authenticatorSelection);
+        if (!opts || !opts.challenge) {
+           throw new Error("Invalid registration options received from the server.");
+        }
+        console.log("user_id:", opts.user.id)
+        console.log("Challenge", opts.challenge)
+        const textEncoder = new TextEncoder();
+        opts.user.id = textEncoder.encode(opts.user.id);
+        //const base64Id = btoa(String.fromCharCode.apply(null, new Uint8Array(opts.user.id)));
+        //opts.user.id = base64Id;
+        //opts.user.id = Uint8Array.from(atob(opts.user.id), c => c.charCodeAt(0)).buffer;
         printToDebug(dbgRegister, "Registration Options", JSON.stringify(opts, null, 2));
 
-        const regResp = await startRegistration(opts);
-        console.log("Received registration options:", opts);
+        let regResp;
+
+        try {
+          regResp = await startRegistration(opts);
+          console.log(regResp,'opts')
+
+            printToDebug(dbgRegister,"Registration Response",JSON.stringify(regResp, null, 2));
+            } catch (err) {
+        printToStatus(statusRegister, getFailureStatus(err));
+        throw new Error(err);
+        }
 
         printToDebug(dbgRegister, "Registration Response", JSON.stringify(regResp, null, 2));
 
@@ -98,13 +128,13 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({regResp}),
+                body: JSON.stringify({ ...regResp, username: username }),
             }
         );
 
         const verificationRespJSON = await verificationResp.json();
-        const { verified, msg } = verificationRespJSON;
-        if (verified) {
+        const { verification_result, msg } = verificationRespJSON;
+        if (verification_result) {
             printToStatus(statusRegister, getPassStatus());
         } else {
             printToStatus(statusRegister, getFailureStatus(msg));
@@ -124,9 +154,12 @@ document.getElementById("registerbtn").addEventListener("click", async () => {
 document.getElementById("loginbtn").addEventListener("click", async () => {
     resetStatus(statusAuthenticate);
     resetDebug(dbgAuthenticate);
-
-    const resp = await fetch("${BASE_URL}/webauth//generate-authentication-options");
+    const username = document.getElementById("username").value;
+    const resp = await fetch(`${BASE_URL}/webauth/authenticate_options?username=${encodeURIComponent(username)}`);
+    console.log("response", resp)
     const opts = await resp.json();
+    console.log("Options", opts)
+
     printToDebug(
       dbgAuthenticate,
       "Authentication Options",
@@ -146,10 +179,11 @@ document.getElementById("loginbtn").addEventListener("click", async () => {
       printToStatus(statusAuthenticate, getFailureStatus(err));
       throw new Error(err);
     }
-
+    console.log("AuthResp", authResp)
+    authResp.username = username;
     // Send response to server
     const verificationResp = await fetch(
-      "/verify-authentication-response",
+        `${BASE_URL}/webauth/verify_authenticate`,
       {
         method: "POST",
         headers: {
@@ -161,8 +195,8 @@ document.getElementById("loginbtn").addEventListener("click", async () => {
 
     // Report validation response
     const verificationRespJSON = await verificationResp.json();
-    const { verified, msg } = verificationRespJSON;
-    if (verified) {
+    const { verification_result, msg } = verificationRespJSON;
+    if (verification_result) {
       printToStatus(statusAuthenticate, getPassStatus());
     } else {
       printToStatus(statusAuthenticate, getFailureStatus(msg));
@@ -173,81 +207,6 @@ document.getElementById("loginbtn").addEventListener("click", async () => {
       JSON.stringify(verificationRespJSON, null, 2)
     );
 });
-
-// Platform Authenticator Check Logic
-(async () => {
-    if (await platformAuthenticatorIsAvailable()) {
-        // Check if platform authenticator is available
-        const userAgent = window.navigator.userAgent.toLowerCase();
-        let platformAuthenticatorName = '';
-        
-        // User Agent analysis to determine the platform authenticator
-        if (userAgent.includes('macintosh') || userAgent.includes('iphone') || userAgent.includes('ipad')) {
-            if (userAgent.includes('macintosh')) {
-                platformAuthenticatorName = 'Touch ID';
-            } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
-                platformAuthenticatorName = 'Face ID';
-            }
-        } else if (userAgent.includes('windows')) {
-            platformAuthenticatorName = 'Windows Hello';
-        } else {
-            platformAuthenticatorName = 'Platform Authenticator';
-        }
-        
-        // Prompt the user to use the platform authenticator
-        const confirmation = confirm(`You can use ${platformAuthenticatorName} or security keys for registration or authentication. Do you want to proceed?`);
-        if (confirmation) {
-    // User confirmed, proceed with registration or authentication using platform authenticator
-    
-    // Check if the action is registration or login
-    const action = document.getElementById("registerbtn").disabled ? "login" : "register";
-
-    // Prepare the request data based on the action
-    const requestData = {
-        action: action,
-        username: document.getElementById("username").value,
-        platformAuthenticatorName: platformAuthenticatorName
-    };
-
-    try {
-        // Send the request to the server
-        const response = await fetch(`${BASE_URL}/webauth/${action}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(requestData),
-        });
-
-        // Handle the response
-        const responseData = await response.json();
-        if (responseData.success) {
-            // If the server indicates success, update the UI accordingly
-            if (action === "register") {
-                printToStatus(statusRegister, getPassStatus());
-            } else {
-                // Handle successful login
-            }
-        } else {
-            // If the server indicates failure, display the error message
-            printToStatus(statusRegister, getFailureStatus(responseData.message));
-        }
-    } catch (err) {
-        // Handle any errors that occur during the request
-        printToStatus(statusRegister, getFailureStatus(err.message));
-        console.error("Error occurred:", err);
-    }
-} else {
-    // User declined, provide alternative option
-    // Example: Prompt the user to use security keys
-    alert('You can use security keys for registration or authentication.');
-}
-
-    } else {
-        // Prompt the user to use security keys
-        alert('You can use security keys for registration or authentication.');
-    }
-})();
 
 
 </script>
