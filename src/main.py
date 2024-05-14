@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import uvicorn
 from route.route import router as webauth_r
-from test import router as test
+#from test import router as test
 from fastapi.middleware.cors import CORSMiddleware
 
 origins = ["*"]
@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(webauth_r)
-app.include_router(test)
+#app.include_router(test)
 
 if __name__ == "__main__":
     import uvicorn
